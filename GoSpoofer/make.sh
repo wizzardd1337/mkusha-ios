@@ -33,12 +33,11 @@ go build -ldflags="-s -w" -buildmode=c-archive \
     -tags=ios \
     .
 
-# Copy header to project root with proper name
-cp "$BUILD_DIR/libgolocationspoofer.h" "$SCRIPT_DIR/golocationspoofer.h"
-echo "Generated golocationspoofer.h"
-
-# Create symbolic link
-ln -sf "$BUILD_DIR/libgolocationspoofer.a" "$SCRIPT_DIR/libgolocationspoofer.a" 2>/dev/null || true
+# Copy header and library to project root with all referenced names
+cp -f "$BUILD_DIR/libgolocationspoofer.h" "$SCRIPT_DIR/golocationspoofer.h"
+cp -f "$BUILD_DIR/libgolocationspoofer.h" "$SCRIPT_DIR/libgolocationspoofer.h"
+cp -f "$BUILD_DIR/libgolocationspoofer.a" "$SCRIPT_DIR/libgolocationspoofer.a"
+echo "Generated golocationspoofer.h and libgolocationspoofer.a"
 
 echo ""
 echo "=== Build Complete ==="

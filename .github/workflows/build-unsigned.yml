@@ -34,29 +34,46 @@ jobs:
 
       - name: Build and Package (unsigned)
         run: |
-          xcodebuild archive \
+          set +e
+          xcodebuild \
             -project location-spoofer.xcodeproj \
             -scheme location-spoofer \
-            -archivePath "$RUNNER_TEMP/mkusha.xcarchive" \
+            -configuration Release \
+            -sdk iphoneos \
             -destination "generic/platform=iOS" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGN_ENTITLEMENTS="" \
-            CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
-            2>&1 | tee "$RUNNER_TEMP/xcode_error.txt"
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            2>&1 | tee "$RUNNER_TEMP/xcode_build.log"
+          
+          BUILD_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "::error::Xcode build failed with exit code $BUILD_EXIT"
+            echo "### Xcode Build Error Summary" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 60 "$RUNNER_TEMP/xcode_build.log" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit $BUILD_EXIT
+          fi
 
           mkdir -p "$RUNNER_TEMP/Payload"
-          APP_PATH=$(find "$RUNNER_TEMP/mkusha.xcarchive/Products/Applications" -maxdepth 1 -name "*.app" | head -1)
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData" -name "location-spoofer.app" -type d | head -1)
           if [ -z "$APP_PATH" ]; then
-            echo "Failed to find .app in archive, trying DerivedData..."
-            APP_PATH=$(find "$RUNNER_TEMP" -name "*.app" | head -1)
+            echo "Error: location-spoofer.app not found in DerivedData!"
+            exit 1
           fi
-          echo "Using App: $APP_PATH"
+          echo "Found app at: $APP_PATH"
           cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
 
           cd "$RUNNER_TEMP"
           zip -qr mkusha-unsigned.ipa Payload
+          echo "Created unsigned IPA successfully:"
+          ls -lh mkusha-unsigned.ipa
 
       - name: Upload IPA
         if: always()
@@ -71,5 +88,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: ${{ runner.temp }}/xcode_error.txt
+          path: ${{ runner.temp }}/xcode_build.log
           retention-days: 7
