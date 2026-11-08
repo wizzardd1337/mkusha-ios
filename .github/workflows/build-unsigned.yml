@@ -68,7 +68,7 @@ jobs:
           fi
 
           mkdir -p "$RUNNER_TEMP/Payload"
-          APP_PATH=$(find "$RUNNER_TEMP/DerivedData" -name "location-spoofer.app" -type d | head -1)
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products" -name "*.app" -maxdepth 2 -type d | head -1)
           if [ -z "$APP_PATH" ]; then
             APP_PATH=$(find "$RUNNER_TEMP/DerivedData" -name "*.app" -type d | head -1)
           fi
