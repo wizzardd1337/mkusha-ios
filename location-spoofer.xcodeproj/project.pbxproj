@@ -16,7 +16,7 @@
 		84BD98C3C4B1CD653B5F1998 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93A434E903E691E1D2443178 /* PacketTunnelProvider.swift */; };
 		8E13A724528DB7D3333AC84C /* location-spoofer-tunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D8D757F13BAAC8E71496C7AF /* location-spoofer-tunnel.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A4630568A5A8948065B9BE4A /* NIOPosix in Frameworks */ = {isa = PBXBuildFile; productRef = 740A872CAF7C917570E3FF24 /* NIOPosix */; };
-		B4A9CEFDA76DF0FF144AB8BF /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 1CE6F820F010C81E230F6B58 /* AppIcon.icon */; };
+		B4A9CEFDA76DF0FF144AB8BF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1CE6F820F010C81E230F6B58 /* Assets.xcassets */; };
 		CC32CBF9711DF55C9C563DE1 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 30149F3B8712F23CAB233B66 /* Logging */; };
 		D6161A240E7070DD28331FD2 /* location_spooferApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A149FA6A5DC44E8C88A1C2F /* location_spooferApp.swift */; };
 		F81CD0549A59B87876C274D7 /* LocationConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DE17083883692D03165972E /* LocationConfiguration.swift */; };
@@ -50,7 +50,7 @@
 		104A1AEBB47DC335637D19AD /* location-spoofer-tunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "location-spoofer-tunnel.entitlements"; sourceTree = "<group>"; };
 		1853DA22B29EE6663FF59682 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1A149FA6A5DC44E8C88A1C2F /* location_spooferApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = location_spooferApp.swift; sourceTree = "<group>"; };
-		1CE6F820F010C81E230F6B58 /* AppIcon.icon */ = {isa = PBXFileReference; path = AppIcon.icon; sourceTree = "<group>"; };
+		1CE6F820F010C81E230F6B58 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
 		224FCEBD569F7C92B3B1B929 /* golocationspoofer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = golocationspoofer.h; sourceTree = "<group>"; };
 		23337A02247D09C30D523817 /* libgolocationspoofer.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libgolocationspoofer.a; sourceTree = "<group>"; };
 		39D64E112D2AC008374EF191 /* CoordinateInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateInputView.swift; sourceTree = "<group>"; };
@@ -117,7 +117,7 @@
 		B4E4622044DFB3E5F8DDBE2A = {
 			isa = PBXGroup;
 			children = (
-				1CE6F820F010C81E230F6B58 /* AppIcon.icon */,
+				1CE6F820F010C81E230F6B58 /* Assets.xcassets */,
 				DC92D01FB6A36C2CB723C07A /* App */,
 				C628EE71A531D3540CA4A63B /* GoSpoofer */,
 				67FEB4ED642B1A04D65931CC /* Resources */,
@@ -247,7 +247,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B4A9CEFDA76DF0FF144AB8BF /* AppIcon.icon in Resources */,
+				B4A9CEFDA76DF0FF144AB8BF /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
