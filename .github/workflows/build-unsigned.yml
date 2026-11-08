@@ -34,6 +34,7 @@ jobs:
 
       - name: Build and Package (unsigned)
         run: |
+          set -o pipefail
           xcodebuild build \
             -project location-spoofer.xcodeproj \
             -scheme location-spoofer \
@@ -43,7 +44,13 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE_SPECIFIER=""
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            2>&1 | tee "$RUNNER_TEMP/build.log" || {
+              echo "==================== XCODEBUILD ERRORS ===================="
+              grep -E "error:|fatal error:|BUILD FAILED" "$RUNNER_TEMP/build.log" | tail -n 25
+              echo "==========================================================="
+              exit 65
+            }
 
           mkdir -p "$RUNNER_TEMP/Payload"
           APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphoneos" -maxdepth 1 -name "*.app" | head -1)
