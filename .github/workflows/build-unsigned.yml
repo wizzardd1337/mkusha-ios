@@ -20,67 +20,17 @@ jobs:
           echo "Using $LATEST_XCODE"
           sudo xcode-select -s "$LATEST_XCODE"
           xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.25"
-          cache-dependency-path: GoSpoofer/go.sum
 
       - name: Build Go static library
         run: |
           cd GoSpoofer
           chmod +x make.sh
           ./make.sh
-
-      - name: Generate Xcode project
-        run: |
-          brew install xcodegen
-          xcodegen generate
-
-          # Apply HACKS.md patch: move libgolocationspoofer.a from Resources to Frameworks
-          python3 << 'PYEOF'
-          with open("location-spoofer.xcodeproj/project.pbxproj", "r") as f:
-              content = f.read()
-
-          lines = content.split("\n")
-          lib_build_id = None
-          for line in lines:
-              if "libgolocationspoofer.a" in line and "PBXFileReference" not in line and "PBXBuildFile" in line:
-                  lib_build_id = line.strip().split(" ")[0]
-                  break
-
-          if lib_build_id:
-              resources_section = False
-              frameworks_section = False
-              new_lines = []
-
-              for line in lines:
-                  if "/* Resources */" in line and "PBXResourcesBuildPhase" in line:
-                      resources_section = True
-                  if "/* Frameworks */" in line and "PBXFrameworksBuildPhase" in line:
-                      frameworks_section = True
-
-                  if resources_section and lib_build_id in line:
-                      resources_section = False
-                      continue
-
-                  if frameworks_section and "files = (" in line:
-                      new_lines.append(line)
-                      if lib_build_id not in content.split("/* Frameworks */")[1].split("/* End")[0] if "/* Frameworks */" in content else "":
-                          new_lines.append(f"\t\t\t\t{lib_build_id} /* libgolocationspoofer.a in Frameworks */,")
-                      frameworks_section = False
-                      continue
-
-                  new_lines.append(line)
-
-              with open("location-spoofer.xcodeproj/project.pbxproj", "w") as f:
-                  f.write("\n".join(new_lines))
-              print("HACKS.md patch applied successfully")
-          else:
-              print("WARNING: lib ref not found")
-          PYEOF
 
       - name: Build and Package (unsigned)
         run: |
@@ -93,8 +43,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES
+            PROVISIONING_PROFILE_SPECIFIER=""
 
           mkdir -p "$RUNNER_TEMP/Payload"
           APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphoneos" -maxdepth 1 -name "*.app" | head -1)
