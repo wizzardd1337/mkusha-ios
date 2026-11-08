@@ -1,215 +1,239 @@
-"""Установщик mkusha ios: находит iPhone по USB и ставит IPA.
-
-GUI на Tkinter + pymobiledevice3 под капотом.
-
-Запуск:  install.cmd  (сам создаст venv и поставит зависимости)
-Или:     python install.py --ipa path\to\app.ipa
 """
-
-from __future__ import annotations
-
-import argparse
-import json
+mkusha iOS Installer
+Автоматически скачивает последний IPA из GitHub Actions и устанавливает на iPhone.
+"""
 import subprocess
 import sys
-import threading
-from pathlib import Path
+import os
+import zipfile
+import tempfile
+import urllib.request
+import json
+import time
+import shutil
 
-APP_DIR = Path(__file__).resolve().parent
+REPO = "wizzardd1337/mkusha-ios"
+ARTIFACT_NAME = "mkusha-unsigned-ipa"
+WORKFLOW_FILE = "build-unsigned.yml"
+
+# nightly.link дает прямые ссылки на артефакты публичных репо без авторизации
+NIGHTLY_LINK = f"https://nightly.link/{REPO}/workflows/{WORKFLOW_FILE}/main/{ARTIFACT_NAME}.zip"
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+IPA_DIR = os.path.join(SCRIPT_DIR, "ipa_cache")
 
 
-def pmd(*args: str, timeout: int = 300) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "pymobiledevice3", *args],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+def log(msg):
+    print(f"[mkusha] {msg}")
 
 
-def list_devices() -> list[dict]:
+def ensure_pymobiledevice3():
+    """Устанавливает pymobiledevice3 если не установлен."""
     try:
-        proc = pmd("usbmux", "list", timeout=30)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
-    text = (proc.stdout or "").strip()
-    if not text:
-        return []
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return []
-    return data if isinstance(data, list) else []
-
-
-def device_label(dev: dict) -> str:
-    name = dev.get("DeviceName") or dev.get("DeviceNameString") or "iPhone"
-    udid = dev.get("UniqueDeviceID") or dev.get("Identifier") or ""
-    ios = dev.get("ProductVersion") or dev.get("iOSVersion") or "?"
-    return f"{name} · iOS {ios} · {udid[:8]}…"
-
-
-def install_ipa(ipa: Path, udid: str | None = None) -> tuple[bool, str]:
-    if not ipa.exists():
-        return False, f"Файл не найден: {ipa}"
-    args = ["apps", "install", str(ipa)]
-    if udid:
-        args += ["--udid", udid]
-    try:
-        proc = pmd(*args, timeout=600)
-    except subprocess.TimeoutExpired:
-        return False, "Установка не завершилась за 10 минут."
-    out = ((proc.stdout or "") + (proc.stderr or "")).strip()
-    return proc.returncode == 0, out or "(нет вывода)"
-
-
-# ---------------------------------------------------------------- CLI
-
-def run_cli(ipa: Path, udid: str | None) -> int:
-    devices = list_devices()
-    if not devices:
-        print("iPhone не найден. Подключи кабелем и нажми «Доверять».")
-        return 1
-    print("Найдено устройств:", len(devices))
-    for dev in devices:
-        print("  -", device_label(dev))
-    ok, out = install_ipa(ipa, udid)
-    print(out)
-    print("Готово." if ok else "Ошибка установки.")
-    return 0 if ok else 1
-
-
-# ---------------------------------------------------------------- GUI
-
-def run_gui() -> int:
-    import tkinter as tk
-    from tkinter import filedialog, messagebox, ttk
-
-    root = tk.Tk()
-    root.title("mkusha ios — установка")
-    root.geometry("620x460")
-    root.configure(bg="#0f1115")
-
-    style = ttk.Style(root)
-    try:
-        style.theme_use("clam")
-    except tk.TclError:
+        import pymobiledevice3
+        log(f"pymobiledevice3 v{pymobiledevice3.__version__} найден")
+        return True
+    except ImportError:
         pass
-    style.configure("TLabel", background="#0f1115", foreground="#e6e9ef", font=("Segoe UI", 10))
-    style.configure("TButton", font=("Segoe UI", 10), padding=8)
-    style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"))
-    style.configure("Dim.TLabel", foreground="#8b93a3")
 
-    tk.Label(
-        root, text="mkusha ios", bg="#0f1115", fg="#ffffff",
-        font=("Segoe UI", 18, "bold"),
-    ).pack(anchor="w", padx=18, pady=(18, 2))
-    tk.Label(
-        root, text="Найди iPhone по USB и установи IPA",
-        bg="#0f1115", fg="#8b93a3", font=("Segoe UI", 10),
-    ).pack(anchor="w", padx=18, pady=(0, 12))
-
-    device_var = tk.StringVar(value="поиск устройства…")
-    tk.Label(
-        root, textvariable=device_var, bg="#0f1115", fg="#4f9cf9",
-        font=("Segoe UI", 11, "bold"),
-    ).pack(anchor="w", padx=18)
-
-    ipa_var = tk.StringVar(value="")
-    row = tk.Frame(root, bg="#0f1115")
-    row.pack(fill="x", padx=18, pady=12)
-
-    entry = tk.Entry(
-        row, textvariable=ipa_var, bg="#0b0d11", fg="#e6e9ef",
-        insertbackground="#e6e9ef", relief="flat",
+    log("Устанавливаю pymobiledevice3...")
+    r = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "pymobiledevice3"],
+        capture_output=True, text=True
     )
-    entry.pack(side="left", fill="x", expand=True, ipady=8, padx=(0, 8))
+    if r.returncode != 0:
+        log(f"Ошибка установки pymobiledevice3: {r.stderr}")
+        return False
+    log("pymobiledevice3 установлен!")
+    return True
 
-    def pick_ipa() -> None:
-        path = filedialog.askopenfilename(
-            title="Выбери IPA", filetypes=[("iOS app", "*.ipa"), ("All", "*.*")]
+
+def download_ipa():
+    """Скачивает последний IPA из GitHub Actions через nightly.link."""
+    os.makedirs(IPA_DIR, exist_ok=True)
+    ipa_path = os.path.join(IPA_DIR, "mkusha-unsigned.ipa")
+    zip_path = os.path.join(IPA_DIR, "artifact.zip")
+
+    log("Скачиваю последний IPA из GitHub Actions...")
+    log(f"URL: {NIGHTLY_LINK}")
+
+    try:
+        req = urllib.request.Request(NIGHTLY_LINK, headers={"User-Agent": "mkusha-installer"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = resp.read()
+            with open(zip_path, "wb") as f:
+                f.write(data)
+        log(f"Скачано {len(data)} байт")
+    except Exception as e:
+        log(f"Ошибка скачивания: {e}")
+        # Попробуем альтернативный способ через GitHub API
+        log("Пробую альтернативный способ через GitHub API...")
+        if not download_ipa_via_api(ipa_path):
+            # Проверим, есть ли уже IPA в кэше
+            if os.path.exists(ipa_path):
+                log(f"Использую кэшированный IPA: {ipa_path}")
+                return ipa_path
+            log("Не удалось скачать IPA. Скачай вручную:")
+            log(f"  https://github.com/{REPO}/actions")
+            log(f"  Скачай артефакт '{ARTIFACT_NAME}' и положи в: {IPA_DIR}")
+            return None
+
+    # Распаковываем ZIP
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            log(f"Содержимое архива: {names}")
+            for name in names:
+                if name.endswith(".ipa"):
+                    zf.extract(name, IPA_DIR)
+                    extracted = os.path.join(IPA_DIR, name)
+                    if extracted != ipa_path:
+                        shutil.move(extracted, ipa_path)
+                    break
+            else:
+                # IPA может быть единственным файлом
+                zf.extractall(IPA_DIR)
+                # Ищем IPA
+                for root, dirs, files in os.walk(IPA_DIR):
+                    for f in files:
+                        if f.endswith(".ipa"):
+                            found = os.path.join(root, f)
+                            if found != ipa_path:
+                                shutil.move(found, ipa_path)
+                            break
+    except zipfile.BadZipFile:
+        # Может быть сам файл уже IPA
+        if zip_path != ipa_path:
+            shutil.move(zip_path, ipa_path)
+
+    if os.path.exists(zip_path) and zip_path != ipa_path:
+        os.remove(zip_path)
+
+    if os.path.exists(ipa_path):
+        size_mb = os.path.getsize(ipa_path) / (1024 * 1024)
+        log(f"IPA готов: {ipa_path} ({size_mb:.1f} MB)")
+        return ipa_path
+    else:
+        log("IPA файл не найден после распаковки!")
+        return None
+
+
+def download_ipa_via_api(ipa_path):
+    """Альтернативный способ через GitHub API (для публичных репо артефакты требуют токен)."""
+    try:
+        headers = {"User-Agent": "mkusha-installer"}
+        url = f"https://api.github.com/repos/{REPO}/actions/artifacts?name={ARTIFACT_NAME}&per_page=1"
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+            artifacts = data.get("artifacts", [])
+            if not artifacts:
+                log("Артефакты не найдены")
+                return False
+            art = artifacts[0]
+            log(f"Найден артефакт: {art['name']} ({art['size_in_bytes']} bytes)")
+            log("Для скачивания артефактов через API нужен GitHub токен.")
+            log("Используй nightly.link или скачай вручную.")
+            return False
+    except Exception as e:
+        log(f"GitHub API ошибка: {e}")
+        return False
+
+
+def find_device():
+    """Находит подключенный iPhone."""
+    log("Ищу подключенный iPhone...")
+    r = subprocess.run(
+        [sys.executable, "-m", "pymobiledevice3", "usbmux", "list", "--no-color"],
+        capture_output=True, text=True
+    )
+    if r.returncode != 0:
+        # Попробуем другой формат
+        r = subprocess.run(
+            [sys.executable, "-m", "pymobiledevice3", "usbmux", "list"],
+            capture_output=True, text=True
         )
-        if path:
-            ipa_var.set(path)
+    
+    output = r.stdout.strip()
+    if not output or "no devices" in output.lower() or output == "[]":
+        log("iPhone не найден! Убедись что:")
+        log("  1. iPhone подключен USB-кабелем")
+        log("  2. На iPhone нажал 'Доверять этому компьютеру'")
+        log("  3. iTunes/Apple Devices установлен на Windows")
+        return None
+    
+    log(f"Устройства:\n{output}")
+    return output
 
-    tk.Button(row, text="Обзор", command=pick_ipa, bg="#1c2029", fg="#e6e9ef",
-              relief="flat", padx=14).pack(side="left")
 
-    log_box = tk.Text(
-        root, height=14, bg="#0b0d11", fg="#9aa4b5", relief="flat",
-        font=("Consolas", 9), wrap="word",
+def install_ipa(ipa_path):
+    """Устанавливает IPA на iPhone через pymobiledevice3."""
+    log(f"Устанавливаю {os.path.basename(ipa_path)} на iPhone...")
+    log("Это может занять 1-2 минуты...")
+
+    r = subprocess.run(
+        [sys.executable, "-m", "pymobiledevice3", "apps", "install", ipa_path],
+        capture_output=False,  # показываем прогресс в реальном времени
+        text=True
     )
-    log_box.pack(fill="both", expand=True, padx=18, pady=(4, 8))
 
-    def log(text: str) -> None:
-        log_box.insert("end", text + "\n")
-        log_box.see("end")
+    if r.returncode == 0:
+        log("="*50)
+        log("✅ ПРИЛОЖЕНИЕ УСТАНОВЛЕНО УСПЕШНО!")
+        log("="*50)
+        log("")
+        log("Что дальше:")
+        log("  1. На iPhone: Настройки -> Основные -> VPN и управление устройством")
+        log("     -> Доверяй профилю разработчика")
+        log("  2. Открой приложение mkusha")
+        log("  3. Включи VPN-профиль в приложении")
+        log("  4. Отключи сотовую связь (оставь Wi-Fi)")
+        log("  5. Выбери точку на карте -> 'Set as Location'")
+        return True
+    else:
+        log(f"Ошибка установки (код {r.returncode})")
+        log("Попробуй:")
+        log("  1. Разблокировать iPhone")
+        log("  2. Нажать 'Доверять' если появится запрос")
+        log("  3. Установить iTunes/Apple Devices из Microsoft Store")
+        log("  4. Запустить скрипт от имени администратора")
+        return False
 
-    devices: list[dict] = []
 
-    def refresh() -> None:
-        nonlocal devices
-        device_var.set("поиск устройства…")
-        root.update_idletasks()
-        devices = list_devices()
-        if devices:
-            device_var.set("● " + device_label(devices[0]))
-            log("Найдено: " + device_label(devices[0]))
-        else:
-            device_var.set("○ iPhone не найден")
-            log("Устройство не найдено. Проверь кабель и «Доверять компьютеру».")
+def main():
+    print()
+    print("=" * 50)
+    print("  mkusha iOS Installer")
+    print("  Автоустановка приложения на iPhone")
+    print("=" * 50)
+    print()
 
-    def do_install() -> None:
-        ipa = Path(ipa_var.get().strip())
-        if not ipa_var.get().strip():
-            messagebox.showwarning("mkusha", "Сначала выбери IPA.")
+    # 1. Проверяем pymobiledevice3
+    if not ensure_pymobiledevice3():
+        input("\nНажми Enter для выхода...")
+        return
+
+    # 2. Проверяем подключение iPhone
+    device = find_device()
+    if not device:
+        input("\nПодключи iPhone и нажми Enter для повтора...")
+        device = find_device()
+        if not device:
+            input("\nНажми Enter для выхода...")
             return
-        if not devices:
-            messagebox.showwarning("mkusha", "iPhone не найден.")
-            return
-        btn_install.config(state="disabled", text="Устанавливаю…")
 
-        def worker() -> None:
-            ok, out = install_ipa(ipa, devices[0].get("UniqueDeviceID"))
-            log(out)
-            log("Готово." if ok else "Ошибка установки.")
-            btn_install.config(state="normal", text="Установить")
-            if ok:
-                messagebox.showinfo("mkusha", "Приложение установлено.")
+    # 3. Скачиваем IPA
+    ipa_path = download_ipa()
+    if not ipa_path:
+        input("\nНажми Enter для выхода...")
+        return
 
-        threading.Thread(target=worker, daemon=True).start()
-
-    buttons = tk.Frame(root, bg="#0f1115")
-    buttons.pack(fill="x", padx=18, pady=(0, 16))
-
-    tk.Button(buttons, text="Обновить", command=refresh, bg="#1c2029", fg="#e6e9ef",
-              relief="flat", padx=14, pady=8).pack(side="left")
-    btn_install = tk.Button(buttons, text="Установить", command=do_install,
-                            bg="#ffffff", fg="#000000", relief="flat",
-                            font=("Segoe UI", 10, "bold"), padx=24, pady=8)
-    btn_install.pack(side="right")
-
-    # авто-поиск IPA рядом со скриптом
-    for candidate in list(APP_DIR.glob("*.ipa")) + list((APP_DIR / "..").glob("*.ipa")):
-        ipa_var.set(str(candidate.resolve()))
-        break
-
-    refresh()
-    root.mainloop()
-    return 0
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="mkusha ios installer")
-    parser.add_argument("--ipa", type=Path, help="путь к .ipa")
-    parser.add_argument("--udid", help="UDID устройства (если подключено несколько)")
-    parser.add_argument("--gui", action="store_true", help="открыть окно")
-    args = parser.parse_args()
-
-    if args.ipa:
-        return run_cli(args.ipa, args.udid)
-    return run_gui()
+    # 4. Устанавливаем
+    install_ipa(ipa_path)
+    
+    print()
+    input("Нажми Enter для выхода...")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
