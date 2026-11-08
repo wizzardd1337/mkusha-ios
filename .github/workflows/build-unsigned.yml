@@ -32,6 +32,11 @@ jobs:
           chmod +x make.sh
           ./make.sh
 
+      - name: Install xcodegen and regenerate project
+        run: |
+          which xcodegen || brew install xcodegen
+          xcodegen generate
+
       - name: Build and Package (unsigned)
         run: |
           set +e
@@ -65,7 +70,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/Payload"
           APP_PATH=$(find "$RUNNER_TEMP/DerivedData" -name "location-spoofer.app" -type d | head -1)
           if [ -z "$APP_PATH" ]; then
-            echo "Error: location-spoofer.app not found in DerivedData!"
+            APP_PATH=$(find "$RUNNER_TEMP/DerivedData" -name "*.app" -type d | head -1)
+          fi
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: application bundle not found in DerivedData!"
             exit 1
           fi
           echo "Found app at: $APP_PATH"
