@@ -34,35 +34,42 @@ jobs:
 
       - name: Build and Package (unsigned)
         run: |
-          set -o pipefail
-          xcodebuild build \
+          xcodebuild archive \
             -project location-spoofer.xcodeproj \
             -scheme location-spoofer \
-            -configuration Debug \
+            -archivePath "$RUNNER_TEMP/mkusha.xcarchive" \
             -destination "generic/platform=iOS" \
-            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            2>&1 | tee "$RUNNER_TEMP/build.log" || {
-              echo "==================== XCODEBUILD ERRORS ===================="
-              grep -E "error:|fatal error:|BUILD FAILED" "$RUNNER_TEMP/build.log" | tail -n 25
-              echo "==========================================================="
-              exit 65
-            }
+            CODE_SIGN_ENTITLEMENTS="" \
+            CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
+            2>&1 | tee "$RUNNER_TEMP/xcode_error.txt"
 
           mkdir -p "$RUNNER_TEMP/Payload"
-          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphoneos" -maxdepth 1 -name "*.app" | head -1)
-          echo "Found compiled app at: $APP_PATH"
+          APP_PATH=$(find "$RUNNER_TEMP/mkusha.xcarchive/Products/Applications" -maxdepth 1 -name "*.app" | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Failed to find .app in archive, trying DerivedData..."
+            APP_PATH=$(find "$RUNNER_TEMP" -name "*.app" | head -1)
+          fi
+          echo "Using App: $APP_PATH"
           cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
 
           cd "$RUNNER_TEMP"
           zip -qr mkusha-unsigned.ipa Payload
 
       - name: Upload IPA
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mkusha-unsigned-ipa
           path: ${{ runner.temp }}/mkusha-unsigned.ipa
           retention-days: 30
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ${{ runner.temp }}/xcode_error.txt
+          retention-days: 7
