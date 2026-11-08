@@ -31,7 +31,7 @@ def ensure_pymobiledevice3():
     """Устанавливает pymobiledevice3 если не установлен."""
     try:
         import pymobiledevice3
-        log(f"pymobiledevice3 v{pymobiledevice3.__version__} найден")
+        log("pymobiledevice3 найден")
         return True
     except ImportError:
         pass
