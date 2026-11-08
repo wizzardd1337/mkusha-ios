@@ -77,6 +77,15 @@ jobs:
             exit 1
           fi
           echo "Found app at: $APP_PATH"
+
+          echo "Applying ad-hoc code signature to app and extensions..."
+          find "$APP_PATH" -type d -name "*.appex" | while read -r ext; do
+            echo "Signing extension: $ext"
+            codesign --force --sign - --timestamp=none "$ext" || true
+          done
+          codesign --force --sign - --timestamp=none "$APP_PATH"
+          codesign -vvv "$APP_PATH" || true
+
           cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
 
           cd "$RUNNER_TEMP"

@@ -169,13 +169,28 @@ def find_device():
 def install_ipa(ipa_path):
     """Устанавливает IPA на iPhone через pymobiledevice3."""
     log(f"Устанавливаю {os.path.basename(ipa_path)} на iPhone...")
+    log("Убедись, что экран iPhone РАЗБЛОКИРОВАН!")
     log("Это может занять 1-2 минуты...")
 
+    # Монтируем DDI образ разработчика
+    log("Подключаю сервисы разработчика iOS...")
+    subprocess.run([sys.executable, "-m", "pymobiledevice3", "mounter", "auto-mount"], capture_output=True)
+
+    # Пробуем установку с флагами разработчика
+    log("Отправляю пакет на iPhone...")
     r = subprocess.run(
-        [sys.executable, "-m", "pymobiledevice3", "apps", "install", ipa_path],
-        capture_output=False,  # показываем прогресс в реальном времени
+        [sys.executable, "-m", "pymobiledevice3", "apps", "install", "--developer", "--streaming", ipa_path],
+        capture_output=False,
         text=True
     )
+
+    if r.returncode != 0:
+        log("Пробую стандартный метод...")
+        r = subprocess.run(
+            [sys.executable, "-m", "pymobiledevice3", "apps", "install", ipa_path],
+            capture_output=False,
+            text=True
+        )
 
     if r.returncode == 0:
         log("="*50)
